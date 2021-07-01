@@ -31,7 +31,7 @@ impl fmt::Display for Comm {
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
-    let code = include_bytes!("../../target/bpfel-unknown-none/debug/kernel").to_vec();
+    let code = include_bytes!("../../target/bpfel-unknown-none/debug/trace-bpf").to_vec();
     let mut bpf = Bpf::load(&code, Btf::from_sys_fs().ok())?;
 
     // dump

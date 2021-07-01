@@ -1,2 +1,2 @@
 [workspace]
-members = [ "kernel", "user" ]
+members = [ "trace", "trace/kernel" ]
