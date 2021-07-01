@@ -14,7 +14,14 @@ use std::{
     sync::Arc,
     thread, time,
 };
+use structopt::StructOpt;
 use tokio::task;
+
+#[derive(Debug, StructOpt)]
+struct Opt {
+    #[structopt(short)]
+    kprobe: Option<String>,
+}
 
 #[derive(Copy, Clone, Debug)]
 struct Comm([u8; 16]);
@@ -31,6 +38,8 @@ impl fmt::Display for Comm {
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
+    let opt = Opt::from_args();
+
     let code = include_bytes!("../../target/bpfel-unknown-none/debug/trace-bpf").to_vec();
     let mut bpf = Bpf::load(&code, Btf::from_sys_fs().ok())?;
 
@@ -76,7 +85,7 @@ pub async fn main() -> anyhow::Result<()> {
                     let buf = &buffers[i];
                     let pid = u32::from_le_bytes(buf[..4].try_into().unwrap());
                     let comm: Comm = unsafe { db.get(&pid, 0).unwrap() };
-                    println!("{}: {}", pid, comm);
+                    println!("cpu{}: pid({})({}) hit!", cpu_id, pid, comm);
                 }
             }
 
@@ -84,10 +93,12 @@ pub async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // attach program
-    let prog: &mut KProbe = bpf.program_mut("kprobe")?.try_into()?;
-    prog.load()?;
-    prog.attach("__x64_sys_openat", 0, None)?;
+    // attach kprobe
+    if let Some(kprobe) = opt.kprobe {
+        let prog: &mut KProbe = bpf.program_mut("kprobe")?.try_into()?;
+        prog.load()?;
+        prog.attach(&kprobe, 0, None)?;
+    }
 
     thread::sleep(time::Duration::from_secs(2));
 

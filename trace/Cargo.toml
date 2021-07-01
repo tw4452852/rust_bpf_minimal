@@ -8,4 +8,5 @@ anyhow = "1.0.41"
 aya = { version = "0.10.2", features = ["async_tokio"] }
 bytes = "1.0.1"
 futures = "0.3.15"
+structopt = "0.3.21"
 tokio = "1.7.1"
