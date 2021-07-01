@@ -2,6 +2,7 @@ use aya::{
     maps::{
         hash_map::HashMap,
         perf::{AsyncPerfEventArray, PerfBufferError},
+        Array,
     },
     programs::KProbe,
     util::online_cpus,
@@ -21,6 +22,9 @@ use tokio::task;
 struct Opt {
     #[structopt(short)]
     kprobe: Option<String>,
+
+    #[structopt(short)]
+    core: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -92,6 +96,11 @@ pub async fn main() -> anyhow::Result<()> {
             Ok::<_, PerfBufferError>(())
         });
     }
+
+    // filter core
+    let mut core_array = Array::try_from(bpf.map_mut("CORE")?)?;
+    let core = opt.core.unwrap_or(1113);
+    core_array.set(0, core, 0)?;
 
     // attach kprobe
     if let Some(kprobe) = opt.kprobe {
