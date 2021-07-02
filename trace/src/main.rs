@@ -2,13 +2,14 @@ use aya::{
     maps::{
         hash_map::HashMap,
         perf::{AsyncPerfEventArray, PerfBufferError},
-        Array,
+        Array, StackTraceMap,
     },
     programs::KProbe,
-    util::online_cpus,
+    util::{kernel_symbols, online_cpus},
     Bpf, Btf, Pod,
 };
 use bytes::BytesMut;
+use plain::Plain;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -25,6 +26,9 @@ struct Opt {
 
     #[structopt(short)]
     core: Option<u32>,
+
+    #[structopt(short)]
+    stack: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -39,6 +43,14 @@ impl fmt::Display for Comm {
         write!(f, "{}", s)
     }
 }
+
+#[repr(C)]
+#[derive(Default)]
+struct event {
+    pid: u32,
+    kernel_stackid: u32,
+}
+unsafe impl Plain for event {}
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
@@ -65,13 +77,18 @@ pub async fn main() -> anyhow::Result<()> {
     }
 
     // register callbacks
-    let mut perf_array = AsyncPerfEventArray::try_from(bpf.map_mut("HIT_PIDS")?)?;
+    let mut perf_array = AsyncPerfEventArray::try_from(bpf.map_mut("EVENTS")?)?;
     let comms = Arc::new(HashMap::try_from(bpf.map("COMMS")?)?);
+    let stacks = Arc::new(StackTraceMap::try_from(bpf.map("STACKS")?)?);
+    let ksyms = Arc::new(kernel_symbols()?);
 
     for cpu_id in online_cpus()? {
         // open a separate perf buffer for each cpu
         let mut buf = perf_array.open(cpu_id, None)?;
         let db = Arc::clone(&comms);
+        let stacks = Arc::clone(&stacks);
+        let capture_stack = opt.stack;
+        let ksyms = Arc::clone(&ksyms);
 
         // process each perf buffer in a separate task
         task::spawn(async move {
@@ -87,9 +104,27 @@ pub async fn main() -> anyhow::Result<()> {
                 // and is always <= buffers.len()
                 for i in 0..events.read {
                     let buf = &buffers[i];
-                    let pid = u32::from_le_bytes(buf[..4].try_into().unwrap());
+                    let &event {
+                        pid,
+                        kernel_stackid,
+                    } = event::from_bytes(buf).unwrap();
                     let comm: Comm = unsafe { db.get(&pid, 0).unwrap() };
+
                     println!("cpu{}: pid({})({}) hit!", cpu_id, pid, comm);
+                    if capture_stack && kernel_stackid != 0 {
+                        let mut stack_trace = stacks.get(&kernel_stackid, 0).unwrap();
+
+                        for frame in stack_trace.resolve(&ksyms).frames() {
+                            println!(
+                                "{:#x} {}",
+                                frame.ip,
+                                frame
+                                    .symbol_name
+                                    .as_ref()
+                                    .unwrap_or(&"[unknown symbol name]".to_owned())
+                            );
+                        }
+                    }
                 }
             }
 
@@ -101,6 +136,10 @@ pub async fn main() -> anyhow::Result<()> {
     let mut core_array = Array::try_from(bpf.map_mut("CORE")?)?;
     let core = opt.core.unwrap_or(1113);
     core_array.set(0, core, 0)?;
+
+    // stacktrace
+    let mut stack_array = Array::try_from(bpf.map_mut("STACK")?)?;
+    stack_array.set(0, opt.stack as u8, 0)?;
 
     // attach kprobe
     if let Some(kprobe) = opt.kprobe {
