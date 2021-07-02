@@ -20,14 +20,18 @@ use structopt::StructOpt;
 use tokio::task;
 
 #[derive(Debug, StructOpt)]
+/// A tool to trace function call
 struct Opt {
     #[structopt(short)]
+    /// specify the kernel function to trace
     kprobe: Option<String>,
 
     #[structopt(short)]
+    /// only trace on the specified core
     core: Option<u32>,
 
     #[structopt(short)]
+    /// enable callchian dump
     stack: bool,
 }
 
