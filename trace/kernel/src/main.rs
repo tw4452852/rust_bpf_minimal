@@ -2,7 +2,7 @@
 #![no_main]
 
 use aya_bpf::{
-    bindings::BPF_F_FAST_STACK_CMP,
+    bindings::{BPF_F_FAST_STACK_CMP, BPF_F_USER_STACK},
     cty::*,
     helpers::bpf_get_smp_processor_id,
     macros::*,
@@ -20,6 +20,7 @@ fn do_panic(_info: &core::panic::PanicInfo) -> ! {
 struct event {
     pid: u32,
     kernel_stackid: u32,
+    user_stackid: u32,
 }
 
 #[map]
@@ -49,14 +50,19 @@ fn kprobe(ctx: ProbeContext) {
         return;
     }
 
-    let kernel_stackid = if capture_stack {
+    let (kernel_stackid, user_stackid) = if capture_stack {(
         unsafe {
             STACKS
                 .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
-                .unwrap_or(0)
-        }
+                .unwrap_or(-1) as u32
+        },
+        unsafe {
+            STACKS
+                .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
+                .unwrap_or(-1) as u32
+        })
     } else {
-        0
+        (u32::MAX, u32::MAX)
     };
 
     unsafe {
@@ -66,6 +72,7 @@ fn kprobe(ctx: ProbeContext) {
             &event {
                 pid,
                 kernel_stackid,
+                user_stackid,
             },
             0,
         );

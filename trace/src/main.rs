@@ -53,6 +53,7 @@ impl fmt::Display for Comm {
 struct event {
     pid: u32,
     kernel_stackid: u32,
+    user_stackid: u32,
 }
 unsafe impl Plain for event {}
 
@@ -111,16 +112,33 @@ pub async fn main() -> anyhow::Result<()> {
                     let &event {
                         pid,
                         kernel_stackid,
+                        user_stackid,
                     } = event::from_bytes(buf).unwrap();
                     let comm: Comm = unsafe { db.get(&pid, 0).unwrap() };
 
                     println!("cpu{}: pid({})({}) hit!", cpu_id, pid, comm);
-                    if capture_stack && kernel_stackid != 0 {
+
+                    if capture_stack && kernel_stackid != u32::MAX {
                         let mut stack_trace = stacks.get(&kernel_stackid, 0).unwrap();
 
                         for frame in stack_trace.resolve(&ksyms).frames() {
                             println!(
-                                "{:#x} {}",
+                                "kernel: {:#x} {}",
+                                frame.ip,
+                                frame
+                                    .symbol_name
+                                    .as_ref()
+                                    .unwrap_or(&"[unknown symbol name]".to_owned())
+                            );
+                        }
+                    }
+
+                    if capture_stack && user_stackid != u32::MAX {
+                        let stack_trace = stacks.get(&user_stackid, 0).unwrap();
+
+                        for frame in stack_trace.frames() {
+                            println!(
+                                "user: {:#x} {}",
                                 frame.ip,
                                 frame
                                     .symbol_name
@@ -152,7 +170,7 @@ pub async fn main() -> anyhow::Result<()> {
         prog.attach(&kprobe, 0, None)?;
     }
 
-    thread::sleep(time::Duration::from_secs(2));
+    thread::sleep(time::Duration::from_secs(u64::MAX));
 
     Ok(())
 }
