@@ -7,7 +7,7 @@ use aya_bpf::{
     helpers::bpf_get_smp_processor_id,
     macros::*,
     maps::{Array, HashMap, PerfMap, StackTrace},
-    programs::ProbeContext,
+    programs::{ProbeContext, TracePointContext},
     BpfContext,
 };
 
@@ -42,6 +42,47 @@ static mut STACKS: StackTrace = StackTrace::with_max_entries(64, 0);
 fn kprobe(ctx: ProbeContext) {
     let pid = ctx.pid();
     let comm = ctx.command().unwrap_or([0; 16]);
+    let filter_core = unsafe { *CORE.get(0).unwrap_or(&1113) };
+    let current_core = unsafe { bpf_get_smp_processor_id() };
+    let capture_stack = unsafe { *STACK.get(0).unwrap_or(&false) };
+
+    if filter_core != 1113 && filter_core != current_core {
+        return;
+    }
+
+    let (kernel_stackid, user_stackid) = if capture_stack {(
+        unsafe {
+            STACKS
+                .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
+                .unwrap_or(-1) as u32
+        },
+        unsafe {
+            STACKS
+                .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
+                .unwrap_or(-1) as u32
+        })
+    } else {
+        (u32::MAX, u32::MAX)
+    };
+
+    unsafe {
+        COMMS.insert(&pid, &comm, 0);
+        EVENTS.output(
+            &ctx,
+            &event {
+                pid,
+                kernel_stackid,
+                user_stackid,
+            },
+            0,
+        );
+    }
+}
+
+#[tracepoint]
+fn tracepoint(ctx: TracePointContext) {
+	let pid = ctx.pid();
+    let comm = ctx.command().unwrap_or_default();
     let filter_core = unsafe { *CORE.get(0).unwrap_or(&1113) };
     let current_core = unsafe { bpf_get_smp_processor_id() };
     let capture_stack = unsafe { *STACK.get(0).unwrap_or(&false) };

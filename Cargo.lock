@@ -37,8 +37,6 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 [[package]]
 name = "aya"
 version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db265d5c58d3ea9ce9a1c44ad6d4c3e651c0180208642ac3c4aa5106c1f786a5"
 dependencies = [
  "bitflags",
  "bytes",

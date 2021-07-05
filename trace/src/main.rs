@@ -1,10 +1,11 @@
+use anyhow::anyhow;
 use aya::{
     maps::{
         hash_map::HashMap,
         perf::{AsyncPerfEventArray, PerfBufferError},
         Array, StackTraceMap,
     },
-    programs::KProbe,
+    programs::{KProbe, TracePoint},
     util::{kernel_symbols, online_cpus},
     Bpf, Btf, Pod,
 };
@@ -27,6 +28,10 @@ struct Opt {
     kprobe: Option<String>,
 
     #[structopt(short)]
+    /// specify the trace event to attach
+    event: Option<String>,
+
+    #[structopt(short)]
     /// only trace on the specified core
     core: Option<u32>,
 
@@ -35,7 +40,7 @@ struct Opt {
     stack: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 struct Comm([u8; 16]);
 
 unsafe impl Pod for Comm {}
@@ -114,7 +119,7 @@ pub async fn main() -> anyhow::Result<()> {
                         kernel_stackid,
                         user_stackid,
                     } = event::from_bytes(buf).unwrap();
-                    let comm: Comm = unsafe { db.get(&pid, 0).unwrap() };
+                    let comm: Comm = unsafe { db.get(&pid, 0).unwrap_or_default() };
 
                     println!("cpu{}: pid({})({}) hit!", cpu_id, pid, comm);
 
@@ -167,7 +172,18 @@ pub async fn main() -> anyhow::Result<()> {
     if let Some(kprobe) = opt.kprobe {
         let prog: &mut KProbe = bpf.program_mut("kprobe")?.try_into()?;
         prog.load()?;
-        prog.attach(&kprobe, 0, None)?;
+        prog.attach(&kprobe, 0)?;
+    }
+
+    // attach tracepoint
+    if let Some(event) = opt.event {
+        let parts = event.splitn(2, '/').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err(anyhow!("invalid event format: {}", event));
+        }
+        let prog: &mut TracePoint = bpf.program_mut("tracepoint")?.try_into()?;
+        prog.load()?;
+        prog.attach(parts[0], parts[1])?;
     }
 
     thread::sleep(time::Duration::from_secs(u64::MAX));

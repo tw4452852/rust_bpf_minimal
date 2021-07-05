@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.41"
-aya = { version = "0.10.2", features = ["async_tokio"] }
+aya = { version = "0.10.2", features = ["async_tokio"], path = "../../aya/aya" }
 bytes = "1.0.1"
 futures = "0.3.15"
 plain = "0.2.3"
