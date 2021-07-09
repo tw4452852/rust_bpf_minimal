@@ -56,11 +56,12 @@ fn kprobe(ctx: ProbeContext) {
                 .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
                 .unwrap_or(-1) as u32
         },
-        unsafe {
-            STACKS
-                .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
-                .unwrap_or(-1) as u32
-        })
+        u32::MAX)
+        //unsafe {
+        //    STACKS
+        //        .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
+        //        .unwrap_or(-1) as u32
+        //})
     } else {
         (u32::MAX, u32::MAX)
     };
