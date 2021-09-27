@@ -428,6 +428,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
+name = "share"
+version = "0.1.0"
+dependencies = [
+ "plain",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -544,6 +551,7 @@ dependencies = [
  "bytes",
  "futures",
  "plain",
+ "share",
  "structopt",
  "tokio",
 ]
@@ -553,6 +561,7 @@ name = "trace-bpf"
 version = "0.1.0"
 dependencies = [
  "aya-bpf",
+ "share",
 ]
 
 [[package]]

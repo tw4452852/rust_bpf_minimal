@@ -11,6 +11,7 @@ use aya::{
 };
 use bytes::BytesMut;
 use plain::Plain;
+use share::*;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -53,15 +54,6 @@ impl fmt::Display for Comm {
     }
 }
 
-#[repr(C)]
-#[derive(Default)]
-struct event {
-    pid: u32,
-    kernel_stackid: u32,
-    user_stackid: u32,
-}
-unsafe impl Plain for event {}
-
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
@@ -95,7 +87,7 @@ pub async fn main() -> anyhow::Result<()> {
     for cpu_id in online_cpus()? {
         // open a separate perf buffer for each cpu
         let mut buf = perf_array.open(cpu_id, None)?;
-        let db = Arc::clone(&comms);
+        let comms = Arc::clone(&comms);
         let stacks = Arc::clone(&stacks);
         let capture_stack = opt.stack;
         let ksyms = Arc::clone(&ksyms);
@@ -119,7 +111,7 @@ pub async fn main() -> anyhow::Result<()> {
                         kernel_stackid,
                         user_stackid,
                     } = event::from_bytes(buf).unwrap();
-                    let comm: Comm = unsafe { db.get(&pid, 0).unwrap_or_default() };
+                    let comm: Comm = unsafe { comms.get(&pid, 0).unwrap_or_default() };
 
                     println!("cpu{}: pid({})({}) hit!", cpu_id, pid, comm);
 
@@ -161,7 +153,7 @@ pub async fn main() -> anyhow::Result<()> {
 
     // filter core
     let mut core_array = Array::try_from(bpf.map_mut("CORE")?)?;
-    let core = opt.core.unwrap_or(1113);
+    let core = opt.core.unwrap_or(UNSPECIFIED);
     core_array.set(0, core, 0)?;
 
     // stacktrace

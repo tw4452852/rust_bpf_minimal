@@ -5,3 +5,4 @@ edition = "2018"
 
 [dependencies]
 aya-bpf = { path = "../../../aya/bpf/aya-bpf" }
+share = { path = "../share" }

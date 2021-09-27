@@ -10,17 +10,11 @@ use aya_bpf::{
     programs::{ProbeContext, TracePointContext},
     BpfContext,
 };
+use share::*;
 
 #[panic_handler]
 fn do_panic(_info: &core::panic::PanicInfo) -> ! {
     unreachable!()
-}
-
-#[repr(C)]
-struct event {
-    pid: u32,
-    kernel_stackid: u32,
-    user_stackid: u32,
 }
 
 #[map]
@@ -42,21 +36,23 @@ static mut STACKS: StackTrace = StackTrace::with_max_entries(64, 0);
 fn kprobe(ctx: ProbeContext) {
     let pid = ctx.pid();
     let comm = ctx.command().unwrap_or([0; 16]);
-    let filter_core = unsafe { *CORE.get(0).unwrap_or(&1113) };
+    let filter_core = unsafe { *CORE.get(0).unwrap_or(&UNSPECIFIED) };
     let current_core = unsafe { bpf_get_smp_processor_id() };
     let capture_stack = unsafe { *STACK.get(0).unwrap_or(&false) };
 
-    if filter_core != 1113 && filter_core != current_core {
+    if filter_core != UNSPECIFIED && filter_core != current_core {
         return;
     }
 
-    let (kernel_stackid, user_stackid) = if capture_stack {(
-        unsafe {
-            STACKS
-                .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
-                .unwrap_or(-1) as u32
-        },
-        u32::MAX)
+    let (kernel_stackid, user_stackid) = if capture_stack {
+        (
+            unsafe {
+                STACKS
+                    .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
+                    .unwrap_or(-1) as u32
+            },
+            u32::MAX,
+        )
         //unsafe {
         //    STACKS
         //        .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
@@ -82,27 +78,29 @@ fn kprobe(ctx: ProbeContext) {
 
 #[tracepoint]
 fn tracepoint(ctx: TracePointContext) {
-	let pid = ctx.pid();
+    let pid = ctx.pid();
     let comm = ctx.command().unwrap_or_default();
-    let filter_core = unsafe { *CORE.get(0).unwrap_or(&1113) };
+    let filter_core = unsafe { *CORE.get(0).unwrap_or(&UNSPECIFIED) };
     let current_core = unsafe { bpf_get_smp_processor_id() };
     let capture_stack = unsafe { *STACK.get(0).unwrap_or(&false) };
 
-    if filter_core != 1113 && filter_core != current_core {
+    if filter_core != UNSPECIFIED && filter_core != current_core {
         return;
     }
 
-    let (kernel_stackid, user_stackid) = if capture_stack {(
-        unsafe {
-            STACKS
-                .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
-                .unwrap_or(-1) as u32
-        },
-        unsafe {
-            STACKS
-                .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP|BPF_F_USER_STACK) as u64)
-                .unwrap_or(-1) as u32
-        })
+    let (kernel_stackid, user_stackid) = if capture_stack {
+        (
+            unsafe {
+                STACKS
+                    .get_stackid(&ctx, BPF_F_FAST_STACK_CMP as u64)
+                    .unwrap_or(-1) as u32
+            },
+            unsafe {
+                STACKS
+                    .get_stackid(&ctx, (BPF_F_FAST_STACK_CMP | BPF_F_USER_STACK) as u64)
+                    .unwrap_or(-1) as u32
+            },
+        )
     } else {
         (u32::MAX, u32::MAX)
     };
